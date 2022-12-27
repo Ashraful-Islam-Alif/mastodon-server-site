@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const jwt = require('jsonwebtoken');
 require('dotenv').config();
 const { MongoClient, ServerApiVersion } = require('mongodb');
 
@@ -14,6 +15,21 @@ const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster
 
 const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true, serverApi: ServerApiVersion.v1 });
 
+function verifyJWT(req, res, next) {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+        return res.status(401).send({ message: 'UnAuthorized access' });
+    }
+    const token = authHeader.split(' ')[1];
+    jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, function (err, decoded) {
+        if (err) {
+            return res.status(403).send({ message: 'Forbidden access' })
+        }
+        req.decoded = decoded;
+        next();
+    })
+}
+
 async function run() {
     try {
         await client.connect();
@@ -21,6 +37,53 @@ async function run() {
         const mechanicsOrderBookingCollection = client.db('mastodon_services').collection('mechanics_order');
         const detailingOrderBookingCollection = client.db('mastodon_services').collection('detailing_order');
         const sparePartsOrderBookingCollection = client.db('mastodon_services').collection('spareParts_order');
+        const userCollection = client.db('mastodon_services').collection('users');
+
+        //if user exists update or if not exists added user during creating account
+        app.put('/user/:email', async (req, res) => {
+            const email = req.params.email;
+            const user = req.body;
+            const filter = { email: email };
+            const options = { upsert: true };
+            const updateDoc = {
+                $set: user,
+            };
+            const result = await userCollection.updateOne(filter, updateDoc, options);
+            const token = jwt.sign({ email: email }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' })
+            res.send({ result, token });
+        })
+
+        //user admin role
+        app.put('/users/admin/:email', verifyJWT, async (req, res) => {
+            const email = req.params.email;
+            const requester = req.decoded.email;
+            const requesterAccount = await userCollection.findOne({ email: requester });
+            if (requesterAccount.role === 'admin') {
+                const filter = { email: email };
+                const updateDoc = {
+                    $set: { role: 'admin' },
+                };
+                const result = await userCollection.updateOne(filter, updateDoc);
+                res.send(result);
+            }
+            else {
+                res.status(403).send({ message: 'Forbidden' })
+            }
+
+        })
+        //Check admin role
+        app.get('/admin/:email', verifyJWT, async (req, res) => {
+            const email = req.params.email;
+            const user = await userCollection.findOne({ email: email });
+            const isAdmin = user.role === 'admin';
+            res.send({ admin: isAdmin });
+        })
+
+        //Getting all users
+        app.get('/users', async (req, res) => {
+            const users = await userCollection.find().toArray();
+            res.send(users);
+        })
 
         app.get('/cardata', async (req, res) => {
             const query = {};
@@ -34,8 +97,9 @@ async function run() {
             const result = await mechanicsOrderBookingCollection.insertOne(mechanicsOrderbooking);
             res.send(result);
         })
+        // getting order with emailID
         app.get('/mechanicsOrderbooking', async (req, res) => {
-            const email = req.query.CustomerEmail
+            const email = req.query.CustomerEmail;
             const query = { CustomerEmail: email };
             const orders = await mechanicsOrderBookingCollection.find(query).toArray();
             res.send(orders)
@@ -47,11 +111,18 @@ async function run() {
             const result = await detailingOrderBookingCollection.insertOne(detailingOrderbooking);
             res.send(result);
         })
-        app.get('/detailingOrderbooking', async (req, res) => {
-            const email = req.query.CustomerEmail
-            const query = { CustomerEmail: email };
-            const orders = await detailingOrderBookingCollection.find(query).toArray();
-            res.send(orders)
+        // getting order with emailID
+        app.get('/detailingOrderbooking', verifyJWT, async (req, res) => {
+            const email = req.query.CustomerEmail;
+            const decodedEmail = req.decoded.email;
+            if (email === decodedEmail) {
+                const query = { CustomerEmail: email };
+                const orders = await detailingOrderBookingCollection.find(query).toArray();
+                return res.send(orders);
+            }
+            else {
+                return res.status(403).send({ message: 'Forbidden access' });
+            }
         })
 
 
@@ -60,6 +131,7 @@ async function run() {
             const result = await sparePartsOrderBookingCollection.insertOne(sparePartsOrderbooking);
             res.send(result);
         })
+        // getting order with emailID
         app.get('/sparePartsOrderbooking', async (req, res) => {
             const email = req.query.CustomerEmail
             const query = { CustomerEmail: email };
