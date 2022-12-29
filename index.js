@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 
 const app = express()
 const port = process.env.PORT || 5000
@@ -39,6 +39,17 @@ async function run() {
         const sparePartsOrderBookingCollection = client.db('mastodon_services').collection('spareParts_order');
         const userCollection = client.db('mastodon_services').collection('users');
 
+        const verifyAdmin = async (req, res, next) => {
+            const decodedEmail = req.decoded.email;
+            const query = { email: decodedEmail };
+            const user = await usersCollection.findOne(query);
+
+            if (user?.role !== 'admin') {
+                return res.status(403).send({ message: 'forbidden access' })
+            }
+            next();
+        }
+
         //if user exists update or if not exists added user during creating account
         app.put('/user/:email', async (req, res) => {
             const email = req.params.email;
@@ -53,7 +64,7 @@ async function run() {
             res.send({ result, token });
         })
 
-        //user admin role
+        //set a user as admin role
         app.put('/users/admin/:email', verifyJWT, async (req, res) => {
             const email = req.params.email;
             const requester = req.decoded.email;
@@ -70,6 +81,13 @@ async function run() {
                 res.status(403).send({ message: 'Forbidden' })
             }
 
+        })
+        //user admin role
+        app.delete('/users/admin/:id', verifyJWT, verifyAdmin, async (req, res) => {
+            const id = req.params.id
+            const filter = { _id: ObjectId(id) };
+            const result = await userCollection.deleteOne(filter);
+            res.send(result);
         })
         //Check admin role
         app.get('/admin/:email', verifyJWT, async (req, res) => {
