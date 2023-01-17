@@ -32,17 +32,18 @@ function verifyJWT(req, res, next) {
 
 async function run() {
     try {
-        await client.connect();
+        // await client.connect();
         const carDatabaseCollection = client.db('mastodon_services').collection('car_database');
         const mechanicsOrderBookingCollection = client.db('mastodon_services').collection('mechanics_order');
         const detailingOrderBookingCollection = client.db('mastodon_services').collection('detailing_order');
         const sparePartsOrderBookingCollection = client.db('mastodon_services').collection('spareParts_order');
         const userCollection = client.db('mastodon_services').collection('users');
+        const productCollection = client.db('mastodon_services').collection('products');
 
         const verifyAdmin = async (req, res, next) => {
             const decodedEmail = req.decoded.email;
             const query = { email: decodedEmail };
-            const user = await usersCollection.findOne(query);
+            const user = await userCollection.findOne(query);
 
             if (user?.role !== 'admin') {
                 return res.status(403).send({ message: 'forbidden access' })
@@ -101,6 +102,17 @@ async function run() {
         app.get('/users', async (req, res) => {
             const users = await userCollection.find().toArray();
             res.send(users);
+        })
+        //Getting all product
+        app.get('/product/:key', async (req, res) => {
+            const products = await productCollection.find(
+                {
+                    "$or": [
+                        { name: { $regex: req.params.key } }
+                    ]
+                }
+            ).toArray();
+            res.send(products);
         })
 
         app.get('/cardata', async (req, res) => {
