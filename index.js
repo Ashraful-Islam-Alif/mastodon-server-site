@@ -135,6 +135,14 @@ async function run() {
             res.send(orders)
         })
 
+        // payment of mechanics by ID
+        app.get('/mechanicsOrderbooking/:id', verifyJWT, async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: ObjectId(id) };
+            const orders = await mechanicsOrderBookingCollection.findOne(query);
+            res.send(orders)
+        })
+
 
         app.post('/detailingOrderbooking', async (req, res) => {
             const detailingOrderbooking = req.body;
@@ -155,6 +163,13 @@ async function run() {
             }
         })
 
+        // payment of mechanics by ID
+        app.get('/detailingOrderbooking/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: ObjectId(id) };
+            const orders = await detailingOrderBookingCollection.findOne(query);
+            res.send(orders)
+        })
 
         app.post('/sparePartsOrderbooking', async (req, res) => {
             const sparePartsOrderbooking = req.body;
