@@ -40,6 +40,7 @@ async function run() {
         const sparePartsOrderBookingCollection = client.db('mastodon_services').collection('spareParts_order');
         const userCollection = client.db('mastodon_services').collection('users');
         const productCollection = client.db('mastodon_services').collection('products');
+        const paymentCollection = client.db('mastodon_services').collection('payment');
 
         const verifyAdmin = async (req, res, next) => {
             const decodedEmail = req.decoded.email;
@@ -53,19 +54,24 @@ async function run() {
         }
 
         //Payment Intent
-        app.post('/create-payment-intent', verifyJWT, async (req, res) => {
+        app.post('/create-payment-intent', async (req, res) => {
             const order = req.body;
-            console.log(order);
-            const price = parseInt(order.CPrice);
-            console.log(price)
-            const amount = price * 100;
-            const paymentIntent = await stripe.paymentIntents.create({
-                amount: amount,
-                currency: 'usd',
-                payment_method_types: ['card']
-            });
-            res.send({ clientSecret: paymentIntent.client_secret })
-            console.log(paymentIntent);
+            const CPrice = order.CPrice;
+            const amount = CPrice * 100;
+            if (CPrice) {
+                const paymentIntent = await stripe.paymentIntents.create({
+                    currency: 'usd',
+                    amount: amount,
+                    "payment_method_types": [
+                        "card"
+                    ]
+                });
+                res.send({
+                    clientSecret: paymentIntent.client_secret,
+                });
+            }
+
+
         });
 
         //if user exists update or if not exists added user during creating account
@@ -158,6 +164,22 @@ async function run() {
             const query = { _id: ObjectId(id) };
             const orders = await mechanicsOrderBookingCollection.findOne(query);
             res.send(orders)
+        })
+
+        app.patch('/order/:id', verifyJWT, async (req, res) => {
+            const id = req.params.id;
+            const payment = req.body;
+            const filter = { _id: ObjectId(id) };
+            const updateDoc = {
+                $set: {
+                    paid: true,
+                    transactionId: payment.transactionId,
+                }
+            }
+            const result = await paymentCollection.insertOne(payment);
+            const updatedMechanicsOrder = await mechanicsOrderBookingCollection.updateOne(filter, updateDoc);
+            const updatedDetailingOrder = await detailingOrderBookingCollection.updateOne(filter, updateDoc);
+            res.send(updateDoc)
         })
 
 
