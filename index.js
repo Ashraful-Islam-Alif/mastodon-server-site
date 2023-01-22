@@ -52,7 +52,21 @@ async function run() {
             next();
         }
 
-
+        //Payment Intent
+        app.post('/create-payment-intent', verifyJWT, async (req, res) => {
+            const order = req.body;
+            console.log(order);
+            const price = parseInt(order.CPrice);
+            console.log(price)
+            const amount = price * 100;
+            const paymentIntent = await stripe.paymentIntents.create({
+                amount: amount,
+                currency: 'usd',
+                payment_method_types: ['card']
+            });
+            res.send({ clientSecret: paymentIntent.client_secret })
+            console.log(paymentIntent);
+        });
 
         //if user exists update or if not exists added user during creating account
         app.put('/user/:email', async (req, res) => {
@@ -174,18 +188,7 @@ async function run() {
             res.send(orders)
         })
 
-        //Payment Intent
-        app.post('/create-payment-intent', async (req, res) => {
-            const order = req.body;
-            const price = order.CPrice;
-            const amount = price * 100;
-            const paymentIntent = await stripe.paymentIntents.create({
-                amount: amount,
-                currency: 'usd',
-                payment_method_types: ['card']
-            });
-            res.send({ clientSecret: paymentIntent.client_secret })
-        });
+
 
         app.post('/sparePartsOrderbooking', async (req, res) => {
             const sparePartsOrderbooking = req.body;
